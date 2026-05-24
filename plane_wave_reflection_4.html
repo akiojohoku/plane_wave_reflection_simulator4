@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>平面波の反射シミュレーター</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Hiragino Sans','Noto Sans JP',sans-serif;
+    background:#0d0d1e;color:#e0e0f0;
+    min-height:100vh;display:flex;flex-direction:column;
+    align-items:center;padding:24px 16px 40px;
+  }
+  h1{font-size:20px;font-weight:500;letter-spacing:.04em;margin-bottom:20px;color:#c8d0ff;text-align:center}
+  .app{width:100%;max-width:740px;display:flex;flex-direction:column;gap:16px}
+  .controls{
+    background:rgba(255,255,255,.05);border:.5px solid rgba(255,255,255,.12);
+    border-radius:12px;padding:16px 20px;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center;
+  }
+  .cg{display:flex;align-items:center;gap:8px}
+  .cg label{font-size:13px;color:#9090b8;white-space:nowrap}
+  .cg input[type=range]{
+    -webkit-appearance:none;appearance:none;width:110px;height:4px;
+    border-radius:2px;background:rgba(255,255,255,.15);outline:none;cursor:pointer;
+  }
+  .cg input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#7a9fff;cursor:pointer;
+  }
+  .cg .val{font-size:13px;font-weight:500;color:#c0caff;min-width:32px}
+  select{
+    font-size:13px;padding:5px 10px;border-radius:8px;
+    border:.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);
+    color:#e0e0f0;cursor:pointer;outline:none;
+  }
+  .btn{
+    font-size:13px;padding:6px 16px;border-radius:8px;
+    border:.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);
+    color:#e0e0f0;cursor:pointer;transition:background .15s;
+    display:flex;align-items:center;gap:6px;
+  }
+  .btn:hover{background:rgba(255,255,255,.13)}
+  .btn:active{transform:scale(.97)}
+  #simCanvas{display:block;border-radius:12px;border:.5px solid rgba(255,255,255,.1);background:#080818}
+  .legend{
+    display:flex;flex-wrap:wrap;gap:10px 20px;padding:12px 16px;
+    background:rgba(255,255,255,.03);border:.5px solid rgba(255,255,255,.08);border-radius:10px;
+  }
+  .li{display:flex;align-items:center;gap:7px;font-size:12px;color:#8888aa}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .sc{
+    background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.1);
+    border-radius:10px;padding:12px 16px;
+  }
+  .sl{font-size:12px;color:#7070a0;margin-bottom:4px}
+  .sv{font-size:20px;font-weight:500;color:#b8c8ff}
+  .tt{display:flex;border-radius:8px;overflow:hidden;border:.5px solid rgba(255,255,255,.15)}
+  .tb{
+    flex:1;font-size:12px;padding:5px 12px;border:none;
+    background:rgba(255,255,255,.05);color:#9090b8;
+    cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;
+  }
+  .tb.active{background:rgba(120,160,255,.25);color:#c0d0ff}
+  .tb:hover:not(.active){background:rgba(255,255,255,.1)}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>平面波の反射シミュレーター</h1>
+  <div class="controls">
+    <div class="cg">
+      <label>入射角 θ</label>
+      <input type="range" id="sl_a" min="0" max="90" value="30" step="1">
+      <span class="val" id="v_a">30°</span>
+    </div>
+    <div class="cg">
+      <label>速さ</label>
+      <input type="range" id="sl_s" min="1" max="20" value="4" step="1">
+      <span class="val" id="v_s">4</span>
+    </div>
+    <div class="cg">
+      <label>波長</label>
+      <input type="range" id="sl_l" min="40" max="120" value="70" step="5">
+      <span class="val" id="v_l">70</span>
+    </div>
+    <div class="cg">
+      <label>表示</label>
+      <select id="mode">
+        <option value="incident">入射波</option>
+        <option value="reflected">反射波</option>
+        <option value="both">入射波＋反射波（重ね表示）</option>
+        <option value="combined">合成波</option>
+      </select>
+    </div>
+    <div class="cg">
+      <label>反射の種類</label>
+      <div class="tt">
+        <button class="tb" id="bFree"  onclick="setRT('free')">自由端</button>
+        <button class="tb active" id="bFixed" onclick="setRT('fixed')">固定端</button>
+      </div>
+    </div>
+    <button class="btn" id="playBtn">
+      <svg id="playIco" width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+      </svg>
+      <span id="playLbl">一時停止</span>
+    </button>
+    <button class="btn" id="stepBtn">コマ送り ▶|</button>
+  </div>
+
+  <canvas id="simCanvas"></canvas>
+
+  <div class="legend" id="leg">
+    <div class="li" id="l_wall">
+      <div style="width:22px;height:0;border-top:2.5px solid #4a9eff"></div>壁
+    </div>
+    <div class="li" id="l_par" style="display:none">
+      <div style="width:22px;height:0;border-top:2px dashed rgba(220,80,80,.9)"></div>壁方向：進行波の波面
+    </div>
+    <div class="li" id="l_anti" style="display:none">
+      <div style="width:22px;height:0;border-top:2px solid rgba(80,210,120,.9)"></div>定常波の腹
+    </div>
+    <div class="li" id="l_node" style="display:none">
+      <div style="width:22px;height:0;border-top:2px dashed rgba(255,160,50,.9)"></div>定常波の節
+    </div>
+    <div class="li" id="l_inc" style="display:none">
+      <div style="width:36px;height:12px;border-radius:3px;background:linear-gradient(90deg,#ff4400,#ff8800)"></div>
+      山（赤/橙）
+    </div>
+    <div class="li" id="l_inc2" style="display:none">
+      <div style="width:36px;height:12px;border-radius:3px;background:linear-gradient(90deg,#0033ff,#0099ff)"></div>
+      谷（青）
+    </div>
+    <div class="li" id="l_ref" style="display:none">
+      <div style="width:20px;height:12px;border-radius:3px;background:#ff4400;opacity:0.7;"></div>
+      入射波（明るめ）
+    </div>
+    <div class="li" id="l_ref2" style="display:none">
+      <div style="width:20px;height:12px;border-radius:3px;background:#0033ff;opacity:0.7;"></div>
+      反射波（暗め）
+    </div>
+    <div class="li" id="l_anti_mark" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="rgba(255,255,220,0.55)" stroke="#fff" stroke-width="2.2"/></svg>
+      腹（強め合う点）
+    </div>
+    <div class="li" id="l_node_mark" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 18 18"><line x1="3" y1="3" x2="15" y2="15" stroke="#ff4444" stroke-width="2.2" stroke-linecap="round"/><line x1="15" y1="3" x2="3" y2="15" stroke="#ff4444" stroke-width="2.2" stroke-linecap="round"/></svg>
+      節（弱め合う点）
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="sc"><div class="sl">壁方向の波長　λ / sinθ</div><div class="sv" id="lpar">—</div></div>
+    <div class="sc"><div class="sl">壁垂直方向の波長　λ / cosθ</div><div class="sv" id="lperp">—</div></div>
+  </div>
+  <div style="font-size:12px;color:#55556a;text-align:center;margin-top:4px">
+    自由端：壁が定常波の<strong style="color:#50d278">腹</strong>　／　
+    固定端：壁が定常波の<strong style="color:#ff6644">節</strong>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx    = canvas.getContext('2d');
+const CW=660, CH=400, WX=Math.round(CW*.80);
+canvas.width=CW; canvas.height=CH;
+
+function resize(){
+  const w=Math.min(740,window.innerWidth-32);
+  canvas.style.width=w+'px';
+  canvas.style.height=Math.round(w*CH/CW)+'px';
+}
+resize(); window.addEventListener('resize',resize);
+
+let ang=30,lam=70,spd=4,t=0,playing=true,mode='incident',rt='fixed';
+
+document.getElementById('sl_a').addEventListener('input',e=>{ang=+e.target.value;upd()});
+document.getElementById('sl_l').addEventListener('input',e=>{lam=+e.target.value;upd()});
+document.getElementById('sl_s').addEventListener('input',e=>{spd=+e.target.value;upd()});
+document.getElementById('mode').addEventListener('change',e=>{
+  mode=e.target.value;
+  const both=mode==='both';
+  const combined=mode==='combined';
+  // 腹・節の線は合成波モードのみ表示
+  ['l_par','l_anti','l_node'].forEach(id=>
+    document.getElementById(id).style.display=combined?'flex':'none');
+  // both用凡例
+  ['l_inc','l_inc2','l_ref','l_ref2','l_anti_mark','l_node_mark'].forEach(id=>
+    document.getElementById(id).style.display=both?'flex':'none');
+});
+const PAUSE=`<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>`;
+const PLAY =`<polygon points="5,3 19,12 5,21"/>`;
+document.getElementById('playBtn').addEventListener('click',()=>{
+  playing=!playing;
+  document.getElementById('playIco').innerHTML=playing?PAUSE:PLAY;
+  document.getElementById('playLbl').textContent=playing?'一時停止':'再生';
+});
+document.getElementById('stepBtn').addEventListener('click',()=>{
+  playing=false;
+  document.getElementById('playIco').innerHTML=PLAY;
+  document.getElementById('playLbl').textContent='再生';
+  t++;
+});
+function setRT(v){
+  rt=v;
+  document.getElementById('bFree').classList.toggle('active',v==='free');
+  document.getElementById('bFixed').classList.toggle('active',v==='fixed');
+}
+function upd(){
+  const th=ang*Math.PI/180;
+  const sinT=Math.max(Math.sin(th),1e-6), cosT=Math.max(Math.cos(th),1e-6);
+  document.getElementById('v_a').textContent=ang+'°';
+  document.getElementById('v_s').textContent=spd;
+  document.getElementById('v_l').textContent=lam;
+  document.getElementById('lpar').textContent= ang===0 ? '∞' : (lam/sinT).toFixed(1)+' px';
+  document.getElementById('lperp').textContent= ang===90 ? '∞' : (lam/cosT).toFixed(1)+' px';
+}
+
+// ---- オフスクリーン用 ----
+const oc1=document.createElement('canvas'); oc1.width=CW; oc1.height=CH;
+const oc2=document.createElement('canvas'); oc2.width=CW; oc2.height=CH;
+const cx1=oc1.getContext('2d');
+const cx2=oc2.getContext('2d');
+
+function fillWave(c, getV){
+  const img=c.createImageData(CW,CH);
+  const b=img.data;
+  for(let px=0;px<WX;px++){
+    for(let py=0;py<CH;py++){
+      const idx=(py*CW+px)*4;
+      const v=getV(px,py);
+      if(v>0){
+        b[idx]  =Math.min(255,20+Math.round(v*210));
+        b[idx+1]=Math.min(255,20+Math.round(v*80));
+        b[idx+2]=Math.min(255,30+Math.round(v*10));
+      } else {
+        const nv=-v;
+        b[idx]  =Math.min(255,10+Math.round(nv*10));
+        b[idx+1]=Math.min(255,20+Math.round(nv*60));
+        b[idx+2]=Math.min(255,40+Math.round(nv*215));
+      }
+      b[idx+3]=255;
+    }
+  }
+  // 壁の右
+  for(let px=WX;px<CW;px++){
+    for(let py=0;py<CH;py++){
+      const idx=(py*CW+px)*4;
+      b[idx]=10;b[idx+1]=10;b[idx+2]=22;b[idx+3]=255;
+    }
+  }
+  c.putImageData(img,0,0);
+}
+
+function draw(){
+  const th=ang*Math.PI/180;
+  const sinT=Math.max(Math.sin(th), 1e-6), cosT=Math.max(Math.cos(th), 1e-6);
+  const k=2*Math.PI/lam;
+  const om=k*spd*0.25;
+  // 座標系: 右が+x（壁方向）、下が+y（画面座標）
+  // 入射波の進行方向: (+sinT, -cosT) = 右上（壁に向かいつつ上へ）
+  // 反射波の進行方向: (-sinT, -cosT) = 左上（壁から離れつつ上へ）
+  //
+  // d = WX - px（壁からの距離）
+  // 入射波位相: k*(px*sinT - py*cosT) - om*t
+  //           = k*((WX-d)*sinT - py*cosT) - om*t
+  //           = kWs - k*d*sinT - k*py*cosT - om*t
+  // 反射波: 固定端 → -sin(kWs + k*d*sinT - k*py*cosT - om*t)
+  //         自由端 → +sin(kWs + k*d*sinT - k*py*cosT - om*t)
+  const kWs=k*WX*sinT;
+
+  function vi(px,py){
+    const d=WX-px;
+    return Math.sin(kWs - k*d*sinT - k*py*cosT - om*t);
+  }
+  function vr(px,py){
+    const d=WX-px;
+    const raw=Math.sin(kWs + k*d*sinT - k*py*cosT - om*t);
+    return rt==='free'?raw:-raw;
+  }
+
+  if(mode==='both'){
+    // 入射波: 独自カラー（山=赤/橙、谷=青/水）
+    // 反射波: 独自カラー（山=緑/黄緑、谷=紫/ピンク）
+    // それぞれオフスクリーンに描いて半透明で重ねる
+
+    // --- 入射波カラー ---
+    const img1=cx1.createImageData(CW,CH);
+    const b1=img1.data;
+    // --- 反射波カラー ---
+    const img2=cx2.createImageData(CW,CH);
+    const b2=img2.data;
+
+    for(let px=0;px<CW;px++){
+      for(let py=0;py<CH;py++){
+        const idx=(py*CW+px)*4;
+        if(px>=WX){
+          b1[idx]=b2[idx]=10;
+          b1[idx+1]=b2[idx+1]=10;
+          b1[idx+2]=b2[idx+2]=22;
+          b1[idx+3]=b2[idx+3]=255;
+          continue;
+        }
+        const vi_=vi(px,py);
+        const vr_=vr(px,py);
+
+        // 入射波・反射波ともに山=赤/橙、谷=青
+        // 入射波：やや明るめ
+        if(vi_>0){
+          b1[idx]  =Math.min(255,Math.round(vi_*255));
+          b1[idx+1]=Math.min(255,Math.round(vi_*100));
+          b1[idx+2]=0;
+          b1[idx+3]=Math.min(255,Math.round(40+vi_*215));
+        } else {
+          const n=-vi_;
+          b1[idx]  =0;
+          b1[idx+1]=Math.min(255,Math.round(n*80));
+          b1[idx+2]=Math.min(255,Math.round(n*255));
+          b1[idx+3]=Math.min(255,Math.round(40+n*215));
+        }
+
+        // 反射波：やや暗め（同系色で重なりが見える）
+        if(vr_>0){
+          b2[idx]  =Math.min(255,Math.round(vr_*220));
+          b2[idx+1]=Math.min(255,Math.round(vr_*88));
+          b2[idx+2]=0;
+          b2[idx+3]=Math.min(255,Math.round(40+vr_*215));
+        } else {
+          const n=-vr_;
+          b2[idx]  =0;
+          b2[idx+1]=Math.min(255,Math.round(n*70));
+          b2[idx+2]=Math.min(255,Math.round(n*220));
+          b2[idx+3]=Math.min(255,Math.round(40+n*215));
+        }
+      }
+    }
+    cx1.putImageData(img1,0,0);
+    cx2.putImageData(img2,0,0);
+
+    // 黒背景
+    ctx.fillStyle='#080818';
+    ctx.fillRect(0,0,CW,CH);
+    // 入射波を描画
+    ctx.globalAlpha=1.0;
+    ctx.drawImage(oc1,0,0);
+    // 反射波を半透明で重ねる（screen合成でお互いを引き立てる）
+    ctx.globalCompositeOperation='screen';
+    ctx.globalAlpha=0.9;
+    ctx.drawImage(oc2,0,0);
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1.0;
+
+    // 入射波の波面: 法線方向 (+sinT, -cosT)
+    drawWaveLines( sinT, -cosT, 'rgba(255,160,40,0.7)', om, k, t);
+    // 反射波の波面: 法線方向 (-sinT, -cosT)
+    drawWaveLines(-sinT, -cosT, 'rgba(80,230,100,0.7)', om, k, t);
+
+    // ---- 腹（⭕）と節（✕）のプロット ----
+    // 合成波（自由端）: u = 2·sin(A)·cos(k·d·sinθ)
+    //   A = kWs + k·py·cosθ − ω·t
+    //   d = WX − px
+    //
+    // 腹の条件（時間不変の空間格子）:
+    //   cos(k·d·sinθ) = ±1  → k·d·sinθ = n·π  → d = n·λ/(2sinθ)
+    //   sin(A) = ±1          → A = π/2 + m·π   → k·py·cosθ = π/2 + m·π − kWs + ω·t
+    //                        → py = (π/2 + m·π − kWs + ω·t) / (k·cosθ)
+    //
+    // 節の条件1（壁垂直方向の節線）:
+    //   cos(k·d·sinθ) = 0  → d = (2n+1)·λ/(4sinθ)
+    // 節の条件2（壁平行方向の節線）:
+    //   sin(A) = 0          → A = m·π → py = (m·π − kWs + ω·t) / (k·cosθ)
+    // 節点 = 節線1 × 節線2 の交点
+    //
+    // 固定端の場合: u = −2·cos(A)·sin(k·d·sinθ)
+    //   腹: sin(k·d·sinθ)=±1 → d=(2n+1)·λ/(4sinθ)  かつ  cos(A)=±1 → A=m·π
+    //   節: sin(k·d·sinθ)=0  → d=n·λ/(2sinθ)        かつ  cos(A)=0  → A=π/2+m·π
+
+    // ---- 腹（⭕）と節（✕）の座標計算 ----
+    // 新しい波の式:
+    //   vi = sin(kWs - k*d*sinT - k*py*cosT - om*t)
+    //   vr = ±sin(kWs + k*d*sinT - k*py*cosT - om*t)
+    //
+    // 自由端合成: 2·sin(kWs - k*py*cosT - om*t)·cos(k*d*sinT)
+    //   腹: cos(k*d*sinT)=±1 → d=n·λ/(2sinT)
+    //       かつ sin(kWs - k*py*cosT - om*t)=±1
+    //       → kWs - k*py*cosT - om*t = π/2 + m·π
+    //       → py = (kWs - om*t - π/2 - m·π) / (k*cosT)
+    //   節: cos(k*d*sinT)=0 → d=(2n+1)·λ/(4sinT)
+    //       かつ sin(...)=0
+    //       → kWs - k*py*cosT - om*t = m·π
+    //       → py = (kWs - om*t - m·π) / (k*cosT)
+    //
+    // 固定端合成: -2·cos(kWs - k*py*cosT - om*t)·sin(k*d*sinT)
+    //   腹: sin(k*d*sinT)=±1 → d=(2n+1)·λ/(4sinT)
+    //       かつ cos(...)=±1 → kWs - k*py*cosT - om*t = m·π
+    //       → py = (kWs - om*t - m·π) / (k*cosT)
+    //   節: sin(k*d*sinT)=0 → d=n·λ/(2sinT)
+    //       かつ cos(...)=0 → kWs - k*py*cosT - om*t = π/2 + m·π
+    //       → py = (kWs - om*t - π/2 - m·π) / (k*cosT)
+
+    const hp = lam / (2*sinT);
+    const qp = hp / 2;
+
+    const antiD = [], nodeD = [];
+    if (rt === 'free') {
+      for (let n=0; n<80; n++) { const d=n*hp;       if(d>WX)break; antiD.push(d); }
+      for (let n=0; n<80; n++) { const d=(2*n+1)*qp; if(d>WX)break; nodeD.push(d); }
+    } else {
+      for (let n=0; n<80; n++) { const d=(2*n+1)*qp; if(d>WX)break; antiD.push(d); }
+      for (let n=0; n<80; n++) { const d=n*hp;       if(d>WX)break; nodeD.push(d); }
+    }
+
+    // py の間隔（y方向の半波長）
+    const stepPY = Math.PI / (k*cosT);
+    // py の基準値: (kWs - om*t) を stepPY で割った余り → [0, stepPY) に正規化
+    const base = (kWs - om*t);
+
+    function calcPYList(phaseOffset) {
+      // py = (base - phaseOffset - m·π) / (k*cosT) = (base - phaseOffset)/（k*cosT) - m*stepPY
+      const py0 = (base - phaseOffset) / (k*cosT);
+      // py0 を [0, stepPY) に正規化した起点を求め、画面全体をカバーする
+      const py_start = py0 - Math.floor(py0 / stepPY) * stepPY;
+      const list = [];
+      for (let py = py_start; py <= CH + stepPY; py += stepPY) {
+        if (py >= -1) list.push(py);
+      }
+      // 負側も念のため
+      for (let py = py_start - stepPY; py >= -1; py -= stepPY) {
+        if (py <= CH + 1) list.push(py);
+      }
+      return list;
+    }
+
+    let antiPY, nodePY;
+    if (rt === 'free') {
+      antiPY = calcPYList(Math.PI/2); // sin=±1: phase=π/2+mπ → offset=π/2
+      nodePY = calcPYList(0);          // sin=0:  phase=mπ     → offset=0
+    } else {
+      antiPY = calcPYList(0);          // cos=±1: phase=mπ     → offset=0
+      nodePY = calcPYList(Math.PI/2);  // cos=0:  phase=π/2+mπ → offset=π/2
+    }
+
+    const R_ANTI = 7, R_NODE = 6;
+
+    // ⭕ 腹：白縁の明るい円
+    ctx.save();
+    for (const d of antiD) {
+      const px = WX - d;
+      if (px < 0 || px > WX) continue;
+      for (const py of antiPY) {
+        // 白い外縁
+        ctx.beginPath(); ctx.arc(px, py, R_ANTI+2, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fill();
+        // 明るい円
+        ctx.beginPath(); ctx.arc(px, py, R_ANTI, 0, Math.PI*2);
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.2; ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,220,0.55)'; ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // ✕ 節：赤いバツ印
+    ctx.save();
+    ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2.2;
+    for (const d of nodeD) {
+      const px = WX - d;
+      if (px < 0 || px > WX) continue;
+      for (const py of nodePY) {
+        const s = R_NODE;
+        ctx.beginPath(); ctx.moveTo(px-s, py-s); ctx.lineTo(px+s, py+s); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px+s, py-s); ctx.lineTo(px-s, py+s); ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+  } else {
+    // 通常モード
+    ctx.fillStyle='#080818'; ctx.fillRect(0,0,CW,CH);
+    ctx.globalAlpha=1.0;
+    ctx.globalCompositeOperation='source-over';
+
+    const imgD=ctx.createImageData(CW,CH);
+    const bd=imgD.data;
+    for(let px=0;px<CW;px++){
+      for(let py=0;py<CH;py++){
+        const idx=(py*CW+px)*4;
+        if(px>=WX){
+          bd[idx]=10;bd[idx+1]=10;bd[idx+2]=22;bd[idx+3]=255;continue;
+        }
+        const vi_=vi(px,py), vr_=vr(px,py);
+        let v=mode==='combined'?(vi_+vr_)*0.5:mode==='incident'?vi_:vr_;
+        if(v>0){
+          bd[idx]  =Math.min(255,20+Math.round(v*210));
+          bd[idx+1]=Math.min(255,20+Math.round(v*80));
+          bd[idx+2]=Math.min(255,30+Math.round(v*10));
+        } else {
+          const nv=-v;
+          bd[idx]  =Math.min(255,10+Math.round(nv*10));
+          bd[idx+1]=Math.min(255,20+Math.round(nv*60));
+          bd[idx+2]=Math.min(255,40+Math.round(nv*215));
+        }
+        bd[idx+3]=255;
+      }
+    }
+    ctx.putImageData(imgD,0,0);
+
+    // 進行波の波面（横破線）と腹・節の縦線は合成波モードのみ表示
+    if (mode === 'combined') {
+    const lPar=lam/cosT;
+    const vPar=(spd*0.25)/cosT;
+    const off=((t*vPar)%lPar+lPar)%lPar;
+    ctx.save();
+    ctx.strokeStyle='rgba(220,80,80,.75)'; ctx.lineWidth=1.5; ctx.setLineDash([8,5]);
+    for(let i=-12;i<30;i++){
+      const y=i*lPar+(lPar-off%lPar);
+      if(y>=0&&y<=CH){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WX-2,y);ctx.stroke()}
+    }
+    ctx.restore();
+
+    // 腹・節
+    const hp=lam/(2*sinT), qp=hp/2;
+    ctx.save();
+    ctx.strokeStyle='rgba(80,210,120,.8)'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+    for(let n=0;n<80;n++){
+      const d=rt==='free'?n*hp:(2*n+1)*qp;
+      const x=WX-d; if(x<=0)break;
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle='rgba(255,160,50,.8)'; ctx.lineWidth=1.5; ctx.setLineDash([5,5]);
+    for(let n=0;n<80;n++){
+      const d=rt==='free'?(2*n+1)*qp:n*hp;
+      const x=WX-d; if(x<=0)break;
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();
+    }
+    ctx.restore(); ctx.setLineDash([]);
+    } // end combined-only block
+  }
+
+  // 壁
+  ctx.strokeStyle='#4a9eff'; ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(WX,0);ctx.lineTo(WX,CH);ctx.stroke();
+  for(let i=0;i<Math.ceil(CH/65);i++){
+    const yc=28+i*65; if(yc>CH)break;
+    if(rt==='free'){
+      ctx.beginPath();ctx.arc(WX,yc,4,0,Math.PI*2);
+      ctx.fillStyle='#fff';ctx.fill();
+      ctx.strokeStyle='#4a9eff';ctx.lineWidth=1.5;ctx.stroke();
+    } else {
+      ctx.strokeStyle='#ff6644';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(WX-4,yc-4);ctx.lineTo(WX+4,yc+4);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(WX+4,yc-4);ctx.lineTo(WX-4,yc+4);ctx.stroke();
+    }
+  }
+  ctx.font='12px sans-serif';
+  ctx.fillStyle=rt==='free'?'#60aaee':'#ff8866';
+  ctx.fillText(rt==='free'?'壁（自由端）':'壁（固定端）',WX+8,16);
+
+  // 矢印
+  const cx0=WX-110, cy0=CH/2, al=52;
+  function arr(x1,y1,x2,y2,col,lbl,lx,ly){
+    const dx=x2-x1,dy=y2-y1,ln=Math.sqrt(dx*dx+dy*dy);
+    if(ln<1)return;
+    const ux=dx/ln,uy=dy/ln;
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-ux*10-uy*5,y2-uy*10+ux*5);
+    ctx.lineTo(x2-ux*10+uy*5,y2-uy*10-ux*5);
+    ctx.closePath();ctx.fill();
+    ctx.font='bold 12px sans-serif';
+    ctx.fillText(lbl,x2+(lx||4),y2+(ly||4));
+  }
+  // 入射波: 右上 (+sinT, -cosT)  起点=左下、終点=右上
+  arr(cx0-al*sinT, cy0+al*cosT, cx0+al*sinT, cy0-al*cosT,
+      'rgba(255,210,60,.95)','入射波', 4, -8);
+  // 反射波: 左上 (-sinT, -cosT)  起点=右下、終点=左上
+  arr(cx0+al*sinT, cy0+al*cosT, cx0-al*sinT, cy0-al*cosT,
+      'rgba(100,180,255,.95)','反射波', -46, -8);
+
+  ctx.save();
+  // 法線（水平破線）
+  ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(cx0-50,cy0);ctx.lineTo(cx0+50,cy0);ctx.stroke();
+  ctx.setLineDash([]);
+  // 入射角弧: 水平右(0) から 右上方向(-π/2+th の手前) → arc(cx, cy, r, -th, 0)
+  ctx.strokeStyle='rgba(255,210,60,.8)';ctx.lineWidth=1.3;
+  ctx.beginPath();ctx.arc(cx0,cy0,28,-th,0,false);ctx.stroke();
+  ctx.fillStyle='rgba(255,210,60,.9)';ctx.font='12px sans-serif';
+  ctx.fillText('θ',cx0+22,cy0-8);
+  // 反射角弧: 水平左(π) から 左上方向 → arc(cx, cy, r, Math.PI, Math.PI+th)
+  ctx.strokeStyle='rgba(100,180,255,.8)';ctx.lineWidth=1.3;
+  ctx.beginPath();ctx.arc(cx0,cy0,36,Math.PI,Math.PI+th,false);ctx.stroke();
+  ctx.fillStyle='rgba(100,180,255,.9)';
+  ctx.fillText('θ',cx0-40,cy0-8);
+  ctx.restore();
+
+  if(playing) t++;
+  requestAnimationFrame(draw);
+}
+
+// 波面の斜め線を描く（法線方向 nx,ny の進行波の波面）
+function drawWaveLines(nx,ny,col,om,k,time){
+  const speed=om/k;
+  const off=((speed*time)%lam+lam)%lam;
+  // 波面: nx*x + ny*y = C
+  ctx.save();
+  ctx.strokeStyle=col; ctx.lineWidth=2; ctx.setLineDash([]);
+  // 画面角4点でのスカラー積
+  const cs=[[0,0],[WX,0],[0,CH],[WX,CH]];
+  const vs=cs.map(([cx,cy])=>nx*cx+ny*cy);
+  const Cmin=Math.min(...vs)-lam;
+  const Cmax=Math.max(...vs)+lam;
+  const C0=((off)%lam+lam)%lam;
+  for(let m=Math.floor(Cmin/lam)-1;m<=Math.ceil(Cmax/lam)+1;m++){
+    const C=m*lam+C0;
+    if(C<Cmin||C>Cmax) continue;
+    const pts=lineClip(nx,ny,C,0,0,WX,CH);
+    if(pts){
+      ctx.beginPath();
+      ctx.moveTo(pts[0],pts[1]);
+      ctx.lineTo(pts[2],pts[3]);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function lineClip(nx,ny,C,x0,y0,x1,y1){
+  const pts=[];
+  if(Math.abs(ny)>1e-9){
+    let x=x0, yy=(C-nx*x)/ny; if(yy>=y0&&yy<=y1) pts.push([x,yy]);
+        x=x1;    yy=(C-nx*x)/ny; if(yy>=y0&&yy<=y1) pts.push([x,yy]);
+  }
+  if(Math.abs(nx)>1e-9){
+    let y=y0, xx=(C-ny*y)/nx; if(xx>=x0&&xx<=x1) pts.push([xx,y]);
+        y=y1;    xx=(C-ny*y)/nx; if(xx>=x0&&xx<=x1) pts.push([xx,y]);
+  }
+  if(pts.length<2) return null;
+  return [pts[0][0],pts[0][1],pts[1][0],pts[1][1]];
+}
+
+upd(); draw();
+</script>
+</body>
+</html>
